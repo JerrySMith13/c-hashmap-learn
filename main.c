@@ -1,2 +1,6 @@
 #include "clru.h"
-int main(void) { return 0; }
+int main(void) { 
+    
+    struct HashMap map = HashMap_new();
+
+}
