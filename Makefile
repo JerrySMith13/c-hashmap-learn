@@ -1,5 +1,6 @@
 main: main.c
-	gcc main.c -o main
+	gcc -Wall -Werror -Wno-missing-braces main.c -o main
+
 	./main
 .PHONY: clean
 clean:

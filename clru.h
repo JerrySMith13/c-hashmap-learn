@@ -40,7 +40,7 @@ struct Node{
 
 };
 
-struct Node null_node(){
+struct Node _null_node(){
 
 	return (struct Node){
 		.hash = 0,
@@ -54,7 +54,7 @@ struct Node null_node(){
 
 }
 
-struct Node Node_from_kv(struct String* key, struct String* val, struct Node* next, int hash){
+struct Node Node_from_kv(const struct String* key, const struct String* val, struct Node* next, int hash){
 	struct Node retval = (struct Node) {
 		.hash = hash,
 		.key = *key,
@@ -64,6 +64,23 @@ struct Node Node_from_kv(struct String* key, struct String* val, struct Node* ne
 	};
 	return retval;
 
+}
+//frees all nodes except for head of list (should ONLY BE DONE WHEN DESTRUCTING A HASHMAP)
+void Node_clean_list(struct Node* head) {
+    if (head == NULL || head->is_null) {
+		return;
+	}
+	
+	struct Node* current = head->next;
+	struct Node* temp;
+
+	while (current != NULL) {
+        temp = current;
+        current = current->next;
+        free(temp);
+    }
+
+	head->next = NULL;
 }
 
 void Node_remove_linkedlist(struct Node** head, const struct String* key){
@@ -91,7 +108,7 @@ void Node_remove_linkedlist(struct Node** head, const struct String* key){
 
 struct HashMap{
 	size_t capacity;
-	int load_factor;
+	double load_factor;
 	size_t size;
 
 	struct Node* nodes;
@@ -101,13 +118,13 @@ struct HashMap{
 struct HashMap HashMap_new(){
 
 	size_t capacity = 16;
-	int load_factor = 75;
+	double load_factor = 0.75;
 	size_t size = 0;
 
 	struct Node* nodes = (struct Node*) malloc(sizeof(struct Node) * capacity);
 
 	for(int i = 0; i < capacity; i++){
-		nodes[i] = null_node();
+		nodes[i] = _null_node();
 	}
 
 	struct HashMap retval = (struct HashMap) {
@@ -120,41 +137,95 @@ struct HashMap HashMap_new(){
 	return retval;
 }
 
-//Behavior: inserts new key value pair into the HashMap, if said key is in hashmap, it will 
-void HashMap_insert(struct HashMap* map, struct String key, struct String val){
+void HashMap_destruct(struct HashMap* map){
+	
+	for(int i = 0; i < map->capacity; i++){
+		if(!map->nodes[i].is_null){
+			Node_clean_list(&(map->nodes[i]));
+		}
+	}
+	
+	free(map->nodes);
 
-	int hash = String_hash(&key);
-	struct Node new_node = Node_from_kv(&key, &val, NULL, hash);
+}
+void HashMap_resize(struct HashMap* map);
+void HashMap_insert(struct HashMap* map, const struct String* key, const struct String* val){
+
+	int hash = String_hash(key);
+	struct Node new_node = Node_from_kv(key, val, NULL, hash);
 	
 	size_t index = hash % (map -> capacity);
 
-	if(map -> nodes[index].is_null)
-
+	if(map -> nodes[index].is_null){
 		map -> nodes[index] = new_node;
+		map -> size ++;
+	}
 
 	else{
 		struct Node* current = (&map -> nodes[index]);
 		while(current -> next != NULL){
-			if (strcmp(current -> key.data, key.data) == 0){
-				current->value = val;
+			if (strcmp(current -> key.data, key->data) == 0){
+				current->value = *val;
 				return;
 			}
 			current = current -> next;
 		}
 		current -> next = (struct Node*) malloc(sizeof(struct Node));
 		*(current -> next) = new_node;
+		map -> size ++;
 
+	}
+	if((double) map -> size >= (double) (map -> capacity * map -> load_factor)){
+		HashMap_resize(map);
 	}
 
 }
 
-void HashMap_remove(struct HashMap* map, const struct String* key){
+void HashMap_resize(struct HashMap* map){
+	size_t new_capacity = map->capacity * 2;
+	struct Node* new_nodes = (struct Node*) malloc(sizeof(struct Node) * new_capacity);
+	for(int i = 0; i < new_capacity; i++){
+		new_nodes[i] = _null_node();
+	}
+	struct HashMap new_map = (struct HashMap) {
+		.capacity = new_capacity,
+		.size = 0,
+		.load_factor = map->load_factor,
+		.nodes = new_nodes,
 
+	};
+
+	for(int i = 0; i < map->capacity; i++){
+		if(map->nodes[i].is_null){
+			continue;
+		}
+		else{
+			struct Node* current = &(map->nodes[i]);
+			while (current != NULL){
+				HashMap_insert(&new_map, &current->key, &current->value);
+				current = current->next;
+			}
+			Node_clean_list(&(map->nodes[i]));
+		}
+
+	}
+
+	free(map->nodes);
+	*map = new_map;
+}
+
+bool HashMap_contains(struct HashMap* map, const struct String* key);
+
+void HashMap_remove(struct HashMap* map, const struct String* key){
+	if (HashMap_contains(map, key) == false){
+		return;
+	}
 	int hash = String_hash(key);
 	size_t index = hash % (map -> capacity);
 	struct Node* this_node = &(map -> nodes[index]);
 	
 	Node_remove_linkedlist(&this_node,  key);
+	map->size --;
 
 }
 
@@ -168,7 +239,7 @@ struct String* HashMap_get(struct HashMap* map, const struct String* key){
 		return NULL;
 	}
 
-	while (strcmp(val->value.data, key->data) != 0 && val != NULL){
+	while (val != NULL && strcmp(val->value.data, key->data) != 0){
 		val = val->next;
 	}
 	if (val == NULL){
